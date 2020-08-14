@@ -9,7 +9,7 @@ import android.os.Build;
 
 import androidx.annotation.RequiresApi;
 
-import com.jeff.baselibrary.BuildConfig;
+
 
 /**
  * @ProjectName: WqgFramework

@@ -3,6 +3,7 @@ package com.jeff.baselibrary.ico;
 import android.app.Activity;
 import android.net.Network;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.View;
 import android.widget.Toast;
 
@@ -25,6 +26,7 @@ import java.lang.reflect.Method;
  */
 public class ViewUtils {
     private static final String TAG = "ViewUtils";
+    private static SparseArray<Long> fastClickMap = new SparseArray<>();
 
     // 现在用
     public static void inject(Activity activity) {
@@ -94,19 +96,27 @@ public class ViewUtils {
         Method[] methods = clazz.getMethods();
 
         // 获取onclick注解的值
-        for (Method method : methods) {
-            OnClick onClick = method.getAnnotation(OnClick.class);
-            if (onClick != null) {
-                int[] viewIds = onClick.value();
-                for (int viewId : viewIds) {
-                    View view = finder.findViewById(viewId);
-                    CheckNet checkNet = method.getAnnotation(CheckNet.class);
-                    boolean isCheckNet = checkNet != null;
-                    if (view != null) {
-                        view.setOnClickListener(new DeclareOnClicklistener(object, method, isCheckNet));
+        try {
+
+
+            for (Method method : methods) {
+                OnClick onClick = method.getAnnotation(OnClick.class);
+                if (onClick != null) {
+                    int[] viewIds = onClick.value();
+                    for (int viewId : viewIds) {
+                        View view = finder.findViewById(viewId);
+                        CheckNet checkNet = method.getAnnotation(CheckNet.class);
+                        FastClick fastClick = method.getAnnotation(FastClick.class);
+                        boolean isCheckNet = checkNet != null;
+                        Long clickTimeLimit = fastClick == null ? null : fastClick.value();
+                        if (view != null) {
+                            view.setOnClickListener(new DeclareOnClicklistener(object, method, isCheckNet, clickTimeLimit));
+                        }
                     }
                 }
             }
+        } catch (Exception ex) {
+            Log.e(TAG, ex.getMessage() + "");
         }
     }
 
@@ -114,15 +124,27 @@ public class ViewUtils {
         private Object mObject;
         private Method method;
         private boolean isCheckNet;
+        private Long clickTimeLimit;
 
-        public DeclareOnClicklistener(Object mObject, Method method, boolean isCheckNet) {
+        public DeclareOnClicklistener(Object mObject, Method method, boolean isCheckNet, Long clickTimeLimit) {
             this.mObject = mObject;
             this.method = method;
             this.isCheckNet = isCheckNet;
+            this.clickTimeLimit = clickTimeLimit;
         }
 
         @Override
         public void onClick(View v) {
+            // 快速点击
+            if (clickTimeLimit != null) {
+                if (fastClickMap.get(v.getId()) != null &&
+                        System.currentTimeMillis() - fastClickMap.get(v.getId()) < clickTimeLimit) {
+                    fastClickMap.put(v.getId(), System.currentTimeMillis());
+                    return;
+                }
+                fastClickMap.put(v.getId(), System.currentTimeMillis());
+            }
+
             if (isCheckNet && v.getContext() != null && !NetworkUtil.allVersionNetworkAvailable(v.getContext())) {
                 // todo 可以扩展，多出一个networkErrMethoD ,用来处理网络异常
                 if (true) {
@@ -136,7 +158,7 @@ public class ViewUtils {
             } catch (Exception e) {
                 e.printStackTrace();
                 try {
-                    method.invoke(mObject,  null);
+                    method.invoke(mObject, (Object[]) null);
                 } catch (Exception ex) {
                     ex.printStackTrace();
                     Log.e(TAG, ex.getMessage() + "");
